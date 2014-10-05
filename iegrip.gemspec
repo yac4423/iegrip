@@ -5,7 +5,7 @@ require 'iegrip/version'
 
 Gem::Specification.new do |spec|
   spec.name          = "iegrip"
-  spec.version       = Iegrip::VERSION
+  spec.version       = IEgrip::VERSION
   spec.authors       = ["yac4423"]
   spec.email         = ["iegrip@tech-notes.dyndns.org"]
   spec.summary       = %q{Control Internet Explorer from Ruby script.}
