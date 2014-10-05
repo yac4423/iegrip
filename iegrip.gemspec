@@ -7,10 +7,10 @@ Gem::Specification.new do |spec|
   spec.name          = "iegrip"
   spec.version       = Iegrip::VERSION
   spec.authors       = ["yac4423"]
-  spec.email         = ["yac@tech-notes.dyndns.org"]
-  spec.summary       = %q{TODO: Write a short summary. Required.}
-  spec.description   = %q{TODO: Write a longer description. Optional.}
-  spec.homepage      = ""
+  spec.email         = ["iegrip@tech-notes.dyndns.org"]
+  spec.summary       = %q{Control Internet Explorer from Ruby script.}
+  spec.description   = %q{Control Internet Explorer from Ruby script.}
+  spec.homepage      = "https://github.com/yac4423/iegrip"
   spec.license       = "MIT"
 
   spec.files         = `git ls-files -z`.split("\x0")
