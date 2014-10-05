@@ -75,13 +75,13 @@ module IEgrip
     end
     
     def head()
-      raw_col = @raw_object.all.tags("HEAD")
-      raw_col ? TagElementCollection.new(raw_col, @ie_obj)[0] : nil
+      raw_head = @raw_object.head
+      raw_head ? TagElement.new(raw_head, @ie_obj) : nil
     end
     
     def body()
-      raw_col = @raw_object.all.tags("BODY")
-      raw_col ? TagElementCollection.new(raw_col, @ie_obj)[0] : nil
+      raw_body = @raw_object.body
+      raw_body ? TagElement.new(raw_body, @ie_obj) : nil
     end
     
     def getElementById(tag_id)
