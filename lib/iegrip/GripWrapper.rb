@@ -17,6 +17,14 @@ module IEgrip
       "<#{self.class}>"
     end
     
+    def ole_methodNames
+      list = []
+      @raw_object.ole_methods.each {|ole_method|
+        list.push ole_method.name
+      }
+      list
+    end
+    
     private
     
     OLE_METHODS = [:Type, :Initialize]
