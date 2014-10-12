@@ -262,6 +262,10 @@ module IEgrip
     def to_s
       @raw_object.value
     end
+    def value
+      @raw_object.value
+    end
+    alias text value
     
     def click
       if @ie_obj.version >= 10
