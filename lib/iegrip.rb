@@ -53,6 +53,83 @@ module IEgrip
     end
   end
   
+  module ElementChild
+    def childNodes
+      raw_childNodes = @raw_object.childNodes
+      raw_childNodes ? TagElementCollection.new(raw_childNodes, @ie_obj) : nil
+    end
+    
+    def parentNode
+      raw_element = @raw_object.parentNode()
+      raw_element ? TagElement.new(raw_element, @ie_obj) : nil
+    end
+    
+    def previousSibling
+      raw_node = @raw_object.previousSibling()
+      raw_node ? TagElement.new(raw_node, @ie_obj) : nil
+    end
+    
+    def nextSibling
+      raw_node = @raw_object.nextSibling()
+      raw_node ? TagElement.new(raw_node, @ie_obj) : nil
+    end
+    
+    def firstChild
+      raw_node = @raw_object.firstChild()
+      raw_node ? TagElement.new(raw_node, @ie_obj) : nil
+    end
+    
+    def lastChild
+      raw_node = @raw_object.lastChild()
+      raw_node ? TagElement.new(raw_node, @ie_obj) : nil
+    end
+    
+    def hasChildNodes()
+      #@raw_object.hasChildNodes()  # This method return WIN32OLE object. not boolean
+      @raw_object.childNodes.length > 0
+    end
+    
+    def getStructure(level=0)
+      structure = []
+      self.childNodes.each {|subnode|
+        next if (subnode.nodeType == 3) or (subnode.nodeType == 8)
+        if subnode.hasChildNodes()
+          sub_struct = subnode.getStructure(level+1)
+          if sub_struct.size > 0
+            structure.push ("  " * level) + "<#{subnode.tagName}>"
+            structure += sub_struct
+            structure.push ("  " * level) + "</#{subnode.tagName}>"
+          else
+            structure.push ("  " * level) + "<#{subnode.tagName}/>"
+          end
+        else
+          structure.push ("  " * level) + "<#{subnode.tagName}/>"
+        end
+      }
+      return structure
+    end
+  end
+  
+  module GetElements
+    def getElementById(tag_id)
+      raw_element = @raw_object.getElementById(tag_id)
+      raw_element ? TagElement.new(raw_element, @ie_obj) : nil
+    end
+    
+    def getElementsByName(name)
+      raw_col = @raw_object.getElementsByName(name)
+      raw_col ? TagElementCollection.new(raw_col, @ie_obj) : nil
+    end
+    
+    
+    def getElementsByTagName(tag_name)
+      raw_col = @raw_object.getElementsByTagName(tag_name)
+      raw_col ? TagElementCollection.new(raw_col, @ie_obj) : nil
+    end
+    alias tags getElementsByTagName
+    
+  end
+  
   # ========================
   # Node
   # ========================
@@ -100,7 +177,7 @@ module IEgrip
     
     def parentNode
       raw_element = @raw_object.parentNode()
-      raw_element ? TagElement.new(raw_element, @ie_obj) : nil
+      raw_element ? Node.new(raw_element, @ie_obj) : nil
     end
     
     def previousSibling
@@ -138,19 +215,18 @@ module IEgrip
     
     def getElementById(tag_id)
       raw_element = @raw_object.getElementById(tag_id)
-      raw_element ? TagElement.new(raw_element, @ie_obj) : nil
+      raw_element ? Node.new(raw_element, @ie_obj) : nil
     end
     
     def getElementsByName(name)
       raw_col = @raw_object.getElementsByName(name)
-      raw_col ? TagElementCollection.new(raw_col, @ie_obj) : nil
+      raw_col ? NodeList.new(raw_col, @ie_obj) : nil
     end
     
     def getElementsByTagName(tag_name)
       raw_col = @raw_object.getElementsByTagName(tag_name)
-      raw_col ? TagElementCollection.new(raw_col, @ie_obj) : nil
+      raw_col ? NodeList.new(raw_col, @ie_obj) : nil
     end
-    alias tags getElementsByTagName
     
     def getStructure(level=0)
       structure = []
@@ -177,14 +253,8 @@ module IEgrip
   # IE.Document
   # ========================
   class Document  < Node
-    def frames(index=nil)
-      if index
-        return(nil) if index >= @raw_object.Frames.length
-        Frames.new(@raw_object.frames, @ie_obj)[index]
-      else
-        Frames.new(@raw_object.frames, @ie_obj)
-      end
-    end
+    include ElementChild
+    include GetElements
     
     def head()
       raw_head = @raw_object.head
@@ -192,8 +262,6 @@ module IEgrip
     end
     
     def body()
-      #raw_body = @raw_object.getElementsByTagName("BODY")
-      #raw_body ? TagElementCollection.new(raw_body, @ie_obj)[0] : nil
       TagElement.new(@raw_object.body, @ie_obj)
     end
     
@@ -202,6 +270,14 @@ module IEgrip
       raw_all ? TagElementCollection.new(raw_all, @ie_obj) : nil
     end
     
+    def frames(index=nil)
+      if index
+        return(nil) if index >= @raw_object.Frames.length
+        Frames.new(@raw_object.frames, @ie_obj)[index]
+      else
+        Frames.new(@raw_object.frames, @ie_obj)
+      end
+    end
     
     def documentElement
       raw_element = @raw_object.documentElement()
@@ -224,6 +300,8 @@ module IEgrip
   # TAG Element
   # ========================
   class TagElement  < Node
+    include ElementChild
+    include GetElements
     def tagname
       @raw_object.tagName.downcase
     end
@@ -299,12 +377,6 @@ module IEgrip
       end
       @ie_obj.wait_stable()
     end
-    
-    def getElementsByTagName(tag_name)
-      raw_collection = @raw_object.getElementsByTagName(tag_name)
-      raw_collection ? TagElementCollection.new(raw_collection, @ie_obj) : nil
-    end
-    alias tags getElementsByTagName
     
     def all
       TagElementCollection.new(@raw_object.all, @ie_obj)
