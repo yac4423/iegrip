@@ -39,17 +39,47 @@ module IEgrip
     
     COMPLETE_STATE = 4
     def wait_stable()
-      while @raw_object.Busy == true
-        sleep 0.5
-      end
+      stable_counter = 0
       loop do
-        break if @raw_object.ReadyState == COMPLETE_STATE
-        sleep 0.5
+        break if stable_counter >= 3
+        if (@raw_object.Busy != true) and (@raw_object.ReadyState == COMPLETE_STATE)
+          stable_counter += 1
+        else
+          sleep 0.5
+          stable_counter = 0
+        end
       end
     end
     
     def export(href, filename)
       @urlDownloadToFile.call(0, href, filename, 0, 0)
+    end
+  end
+  
+  module ElementParent
+    def parentNode
+      raw_element = @raw_object.parentNode()
+      raw_element ? HTMLElement.new(raw_element, @ie_obj) : nil
+    end
+    
+    def parentElement
+      raw_parent = @raw_object.parentElement
+      raw_parent ? HTMLElement.new(raw_parent, @ie_obj) : nil
+    end
+    
+    def getParentForm()
+      puts "getParentForm() is called."
+      parent_tag = self.parentElement
+      loop do
+        puts "parent_tag = #{parent_tag.inspect}"
+        if parent_tag == nil
+          return nil
+        elsif parent_tag.tagName == "form"
+          return parent_tag
+        else
+          parent_tag = parent_tag.parentElement
+        end
+      end
     end
   end
   
@@ -59,61 +89,112 @@ module IEgrip
       raw_childNodes ? TagElementCollection.new(raw_childNodes, @ie_obj) : nil
     end
     
-    def parentNode
-      raw_element = @raw_object.parentNode()
-      raw_element ? TagElement.new(raw_element, @ie_obj) : nil
-    end
-    
     def previousSibling
       raw_node = @raw_object.previousSibling()
-      raw_node ? TagElement.new(raw_node, @ie_obj) : nil
+      raw_node ? HTMLElement.new(raw_node, @ie_obj) : nil
     end
     
     def nextSibling
       raw_node = @raw_object.nextSibling()
-      raw_node ? TagElement.new(raw_node, @ie_obj) : nil
+      raw_node ? HTMLElement.new(raw_node, @ie_obj) : nil
     end
     
     def firstChild
       raw_node = @raw_object.firstChild()
-      raw_node ? TagElement.new(raw_node, @ie_obj) : nil
+      raw_node ? HTMLElement.new(raw_node, @ie_obj) : nil
     end
     
     def lastChild
       raw_node = @raw_object.lastChild()
-      raw_node ? TagElement.new(raw_node, @ie_obj) : nil
+      raw_node ? HTMLElement.new(raw_node, @ie_obj) : nil
     end
     
     def hasChildNodes()
-      #@raw_object.hasChildNodes()  # This method return WIN32OLE object. not boolean
-      @raw_object.childNodes.length > 0
+      @raw_object.childNodes.each {|subnode|
+        return true if (subnode.nodeType != 3) and (subnode.nodeType != 8)
+      }
+      false
     end
     
-    def getStructure(level=0)
-      structure = []
+    def contains(node)
+      @raw_object.contains(toRaw(node))
+    end
+    
+    def isEqualNode(node)
+      @raw_object.isEqualNode(toRaw(node))
+    end
+    
+    def Structure(level=0)
+      struct = []
       self.childNodes.each {|subnode|
-        next if (subnode.nodeType == 3) or (subnode.nodeType == 8)
+        inner,outer = get_inner(subnode)
         if subnode.hasChildNodes()
-          sub_struct = subnode.getStructure(level+1)
+          sub_struct = subnode.Structure(level+1)
           if sub_struct.size > 0
-            structure.push ("  " * level) + "<#{subnode.tagName}>"
-            structure += sub_struct
-            structure.push ("  " * level) + "</#{subnode.tagName}>"
+            struct.push ("  " * level) + "<#{inner}>"
+            struct += sub_struct
+            struct.push ("  " * level) + "</#{subnode.tagName}>"
           else
-            structure.push ("  " * level) + "<#{subnode.tagName}/>"
+            struct.push ("  " * level) + "<#{inner} />"
           end
         else
-          structure.push ("  " * level) + "<#{subnode.tagName}/>"
+          if outer
+            struct.push ("  " * level) + "<#{inner}>#{outer}</#{subnode.tagName}>"
+          else
+            struct.push ("  " * level) + "<#{inner} />"
+          end
         end
       }
-      return structure
+      return struct
+    end
+    
+    private
+    
+    def get_inner(tag)
+      inner = [tag.tagName]
+      outer = nil
+      inner.push "id='#{tag.ID}'" if tag.ID != ""
+      case tag.tagName
+      when "a"
+        href = tag.href
+        if href.size > 20
+          href = href[0,19] + "..."
+        end
+        inner.push "href='#{href}'"
+      when "img"
+        inner.push "src='#{tag.src}'"
+      when "input"
+        inner.push "type='#{tag.Type}'"
+      when "form"
+        inner.push "action='#{tag.action}' method='#{tag.Method}'"
+      when "option"
+        inner.push "value='#{tag.value}'"
+      when "style"
+        inner.push "type='#{tag.Type}'"
+      end
+      unless tag.hasChildNodes
+        innerText = tag.innerText
+        if innerText =~ /^<!--(.+)-->$/
+          if $1.size > 20
+            outer = "<!--#{$1[0,19]}...-->"
+          else
+            outer = innerText
+          end
+          innerText = ""
+        end
+        if innerText.size > 20
+          innerText = innerText[0,19] + "..."
+        end
+        inner.push "text='#{innerText}'" if innerText != ""
+      end
+      return [inner.join(' '), outer]
     end
   end
   
   module GetElements
     def getElementById(tag_id)
       raw_element = @raw_object.getElementById(tag_id)
-      raw_element ? TagElement.new(raw_element, @ie_obj) : nil
+      raw_element ? HTMLElement.new(raw_element, @ie_obj) : nil
     end
     
     def getElementsByName(name)
@@ -128,6 +209,60 @@ module IEgrip
     end
     alias tags getElementsByTagName
     
+    def getTagsByTitle(target_str)
+      get_tags_by_key(target_str, "VALUE")
+    end
+    def getTagsByValue(target_str)
+      get_tags_by_key(target_str, "VALUE")
+    end
+    def getTagsByText(target_str)
+      get_tags_by_key(target_str, "INNERTEXT")
+    end
+    def getTagsByName(target_str)
+      get_tags_by_key(target_str, "NAME")
+    end
+    
+    def getTagByTitle(target_str)
+      taglist = get_tags_by_key(target_str, "VALUE")
+      taglist[0]
+    end
+    def getTagByValue(target_str)
+      taglist = get_tags_by_key(target_str, "VALUE")
+      taglist[0]
+    end
+    def getTagByText(target_str)
+      taglist = get_tags_by_key(target_str, "INNERTEXT")
+      taglist[0]
+    end
+    def getTagByName(target_str)
+      taglist = get_tags_by_key(target_str, "NAME")
+      taglist[0]
+    end
+    
+    private
+    
+    def get_tags_by_key(target_str, key_type)
+      tag_list = []
+      @raw_object.all.each {|tag_element|
+        case key_type
+        when "INNERTEXT"
+          key_string = tag_element.innerText
+        when "VALUE"
+          key_string = tag_element.value
+        when "NAME"
+          key_string = tag_element.name
+        when "ID"
+          key_string = tag_element.ID
+        else
+          return nil
+        end
+        if key_string == target_str
+          tag_list.push HTMLElement.new(tag_element, @ie_obj)
+        end
+      }
+      
+      return tag_list
+    end
   end
   
   # ========================
@@ -148,17 +283,13 @@ module IEgrip
       11 => :DOCUMENT_FRAGMENT_NODE,
       12 => :NOTATION_NODE,
     }
-    def tagName
-      case self.nodeType
-      when 3
-        @raw_object.nodeName
-      else
-        @raw_object.tagName.downcase
-      end
-    end
     
     def nodeName
       @raw_object.nodeName
+    end
+    
+    def nodeType
+      @raw_object.nodetype
     end
     
     def nodeTypeName
@@ -170,83 +301,6 @@ module IEgrip
       "<#{self.class}, Name:#{self.nodeName}>"
     end
     
-    def childNodes
-      raw_childNodes = @raw_object.childNodes
-      raw_childNodes ? NodeList.new(raw_childNodes, @ie_obj) : nil
-    end
-    
-    def parentNode
-      raw_element = @raw_object.parentNode()
-      raw_element ? Node.new(raw_element, @ie_obj) : nil
-    end
-    
-    def previousSibling
-      raw_node = @raw_object.previousSibling()
-      raw_node ? Node.new(raw_node, @ie_obj) : nil
-    end
-    
-    def nextSibling
-      raw_node = @raw_object.nextSibling()
-      raw_node ? Node.new(raw_node, @ie_obj) : nil
-    end
-    
-    def firstChild
-      raw_node = @raw_object.firstChild()
-      raw_node ? Node.new(raw_node, @ie_obj) : nil
-    end
-    
-    def lastChild
-      raw_node = @raw_object.lastChild()
-      raw_node ? Node.new(raw_node, @ie_obj) : nil
-    end
-    
-    def hasChildNodes()
-      #@raw_object.hasChildNodes()  # This method return WIN32OLE object. not boolean
-      @raw_object.childNodes.length > 0
-    end
-    
-    def contains(node)
-      @raw_object.contains(toRaw(node))
-    end
-    
-    def isEqualNode(node)
-      @raw_object.isEqualNode(toRaw(node))
-    end
-    
-    def getElementById(tag_id)
-      raw_element = @raw_object.getElementById(tag_id)
-      raw_element ? Node.new(raw_element, @ie_obj) : nil
-    end
-    
-    def getElementsByName(name)
-      raw_col = @raw_object.getElementsByName(name)
-      raw_col ? NodeList.new(raw_col, @ie_obj) : nil
-    end
-    
-    def getElementsByTagName(tag_name)
-      raw_col = @raw_object.getElementsByTagName(tag_name)
-      raw_col ? NodeList.new(raw_col, @ie_obj) : nil
-    end
-    
-    def getStructure(level=0)
-      structure = []
-      self.childNodes.each {|subnode|
-        next if (subnode.nodeType == 3) or (subnode.nodeType == 8)
-        if subnode.hasChildNodes()
-          sub_struct = subnode.getStructure(level+1)
-          if sub_struct.size > 0
-            structure.push ("  " * level) + "<#{subnode.tagName}>"
-            structure += sub_struct
-            structure.push ("  " * level) + "</#{subnode.tagName}>"
-          else
-            structure.push ("  " * level) + "<#{subnode.tagName}/>"
-          end
-        else
-          structure.push ("  " * level) + "<#{subnode.tagName}/>"
-        end
-      }
-      return structure
-    end
   end
   
   # ========================
@@ -258,11 +312,11 @@ module IEgrip
     
     def head()
       raw_head = @raw_object.head
-      raw_head ? TagElement.new(raw_head, @ie_obj) : nil
+      raw_head ? HTMLElement.new(raw_head, @ie_obj) : nil
     end
     
     def body()
-      TagElement.new(@raw_object.body, @ie_obj)
+      HTMLElement.new(@raw_object.body, @ie_obj)
     end
     
     def all
@@ -281,12 +335,12 @@ module IEgrip
     
     def documentElement
       raw_element = @raw_object.documentElement()
-      raw_element ? TagElement.new(raw_element, @ie_obj) : nil
+      raw_element ? HTMLElement.new(raw_element, @ie_obj) : nil
     end
     
     def createElement(tag_name)
       raw_element = @raw_object.createElement(tag_name)
-      TagElement.new(raw_element, @ie_obj)
+      HTMLElement.new(raw_element, @ie_obj)
     end
     
     def createAttribute(attr_name)
@@ -299,16 +353,21 @@ module IEgrip
   # ========================
   # TAG Element
   # ========================
-  class TagElement  < Node
+  class HTMLElement  < Node
+    include ElementParent
     include ElementChild
     include GetElements
     def tagname
-      @raw_object.tagName.downcase
+      if self.nodeType == 8
+        "comment"
+      else
+        @raw_object.tagName.downcase
+      end
     end
     
     def text=(set_text)
-      case tagName
-      when "SELECT"
+      case self.tagname
+      when "select"
         option_list = tags("OPTION")
         option_list.each {|option_element|
           if option_element.innerText == set_text
@@ -382,25 +441,6 @@ module IEgrip
       TagElementCollection.new(@raw_object.all, @ie_obj)
     end
     
-    def parentElement
-      raw_parent = @raw_object.parentElement
-      raw_parent ? TagElement.new(raw_parent, @ie_obj) : nil
-    end
-    
-    def getParentForm()
-      puts "getParentForm() is called."
-      parent_tag = self.parentElement
-      loop do
-        puts "parent_tag = #{parent_tag.inspect}"
-        if parent_tag == nil
-          return nil
-        elsif parent_tag.tagName == "form"
-          return parent_tag
-        else
-          parent_tag = parent_tag.parentElement
-        end
-      end
-    end
     
     def export(filename)
       case self.tagName.downcase
@@ -450,7 +490,7 @@ module IEgrip
   class TagElementCollection  < GripWrapper
     def [](index)
       return(nil) if index >= @raw_object.length
-      TagElement.new(@raw_object.item(index), @ie_obj)
+      HTMLElement.new(@raw_object.item(index), @ie_obj)
     end
     
     def size
@@ -459,7 +499,8 @@ module IEgrip
     
     def each
       @raw_object.each {|tag_element|
-        yield TagElement.new(tag_element, @ie_obj)
+        next if (tag_element.nodeType == 3) or (tag_element.nodeType == 8)
+        yield HTMLElement.new(tag_element, @ie_obj)
       }
     end
     
@@ -490,10 +531,6 @@ module IEgrip
     end
     def getTagByName(target_str)
       taglist = get_tags_by_key(target_str, "NAME")
-      taglist ? taglist[0]: nil
-    end
-    def getTagByID(target_id)
-      taglist = get_tags_by_key(target_id, "ID")
       taglist ? taglist[0]: nil
     end
     
@@ -527,7 +564,7 @@ module IEgrip
           return nil
         end
         if key_string == target_str
-          tag_list.push TagElement.new(tag_element, @ie_obj)
+          tag_list.push HTMLElement.new(tag_element, @ie_obj)
         end
       }
       case tag_list.size
@@ -574,31 +611,6 @@ module IEgrip
     end
   end
   
-  # ========================
-  # NodeList
-  # ========================
-  class NodeList < GripWrapper
-    def [](index)
-      return(nil) if index >= @raw_object.length
-      Node.new(@raw_object.item(index), @ie_obj)
-    end
-    
-    def size
-      @raw_object.length
-    end
-    
-    def each
-      index = 0
-      loop do
-        break if index >= @raw_object.length
-        raw_node = @raw_object.item(index)
-        yield Node.new(raw_node, @ie_obj)
-        index += 1
-      end
-    end
-  end
-  
-  
   class Attr < GripWrapper
     def value=(value_str)
       @raw_object.value = value_str
@@ -608,7 +620,7 @@ module IEgrip
     end
     
     def ownerElement()
-      TagElement.new(@raw_object.ownerElement, @ie_obj)
+      HTMLElement.new(@raw_object.ownerElement, @ie_obj)
     end
   end
 end

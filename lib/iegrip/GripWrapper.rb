@@ -27,7 +27,7 @@ module IEgrip
     
     private
     
-    OLE_METHODS = [:Type, :Initialize]
+    OLE_METHODS = [:Type, :Initialize, :Name, :ID, :Method]
     def method_missing(m_id, *params)
       unless OLE_METHODS.include?(m_id)
         missing_method_name = m_id.to_s.downcase
