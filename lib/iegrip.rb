@@ -179,7 +179,7 @@ module IEgrip
       when "style"
         inner.push "type='#{tag.Type}'"
       end
-      unless tag.hasChildNodes
+      unless tag.hasChildElements
         innerText = tag.innerText
         if innerText =~ /^<!--(.+)-->$/
           if $1.size > 20
