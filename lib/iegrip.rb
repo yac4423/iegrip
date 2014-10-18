@@ -68,16 +68,14 @@ module IEgrip
     end
     
     def getParentForm()
-      puts "getParentForm() is called."
-      parent_tag = self.parentElement
+      parent_element = self.parentElement
       loop do
-        puts "parent_tag = #{parent_tag.inspect}"
-        if parent_tag == nil
+        if parent_element == nil
           return nil
-        elsif parent_tag.tagName == "form"
-          return parent_tag
+        elsif parent_element.tagName == "form"
+          return parent_element
         else
-          parent_tag = parent_tag.parentElement
+          parent_element = parent_element.parentElement
         end
       end
     end
@@ -86,7 +84,12 @@ module IEgrip
   module ElementChild
     def childNodes
       raw_childNodes = @raw_object.childNodes
-      raw_childNodes ? TagElementCollection.new(raw_childNodes, @ie_obj) : nil
+      raw_childNodes ? NodeList.new(raw_childNodes, @ie_obj) : nil
+    end
+    
+    def childElements
+      raw_childNodes = @raw_object.childNodes
+      raw_childNodes ? HTMLElementCollection.new(raw_childNodes, @ie_obj) : nil
     end
     
     def previousSibling
@@ -110,6 +113,10 @@ module IEgrip
     end
     
     def hasChildNodes()
+      @raw_object.childNodes.length > 0
+    end
+    
+    def hasChildElements()
       @raw_object.childNodes.each {|subnode|
         return true if (subnode.nodeType != 3) and (subnode.nodeType != 8)
       }
@@ -124,22 +131,22 @@ module IEgrip
       @raw_object.isEqualNode(toRaw(node))
     end
     
-    def Structure(level=0)
+    def struct(level=0)
       struct = []
-      self.childNodes.each {|subnode|
-        inner,outer = get_inner(subnode)
-        if subnode.hasChildNodes()
-          sub_struct = subnode.Structure(level+1)
+      self.childElements.each {|subelement|
+        inner,outer = get_inner(subelement)
+        if subelement.hasChildElements()
+          sub_struct = subelement.struct(level+1)
           if sub_struct.size > 0
             struct.push ("  " * level) + "<#{inner}>"
             struct += sub_struct
-            struct.push ("  " * level) + "</#{subnode.tagName}>"
+            struct.push ("  " * level) + "</#{subelement.tagName}>"
           else
             struct.push ("  " * level) + "<#{inner} />"
           end
         else
           if outer
-            struct.push ("  " * level) + "<#{inner}>#{outer}</#{subnode.tagName}>"
+            struct.push ("  " * level) + "<#{inner}>#{outer}</#{subelement.tagName}>"
           else
             struct.push ("  " * level) + "<#{inner} />"
           end
@@ -192,56 +199,53 @@ module IEgrip
   end
   
   module GetElements
-    def getElementById(tag_id)
-      raw_element = @raw_object.getElementById(tag_id)
+    def getElementById(element_id)
+      raw_element = @raw_object.getElementById(element_id)
       raw_element ? HTMLElement.new(raw_element, @ie_obj) : nil
     end
     
     def getElementsByName(name)
       raw_col = @raw_object.getElementsByName(name)
-      raw_col ? TagElementCollection.new(raw_col, @ie_obj) : nil
+      raw_col ? HTMLElementCollection.new(raw_col, @ie_obj) : nil
     end
     
     
     def getElementsByTagName(tag_name)
       raw_col = @raw_object.getElementsByTagName(tag_name)
-      raw_col ? TagElementCollection.new(raw_col, @ie_obj) : nil
+      raw_col ? HTMLElementCollection.new(raw_col, @ie_obj) : nil
     end
-    alias tags getElementsByTagName
+    alias elements getElementsByTagName
     
-    def getTagsByTitle(target_str)
-      get_tags_by_key(target_str, "VALUE")
+    def getElementsByTitle(target_str)
+      get_elements_by_key(target_str, "VALUE")
     end
-    def getTagsByValue(target_str)
-      get_tags_by_key(target_str, "VALUE")
+    def getElementsByValue(target_str)
+      get_elements_by_key(target_str, "VALUE")
     end
-    def getTagsByText(target_str)
-      get_tags_by_key(target_str, "INNERTEXT")
-    end
-    def getTagsByName(target_str)
-      get_tags_by_key(target_str, "NAME")
+    def getElementsByText(target_str)
+      get_elements_by_key(target_str, "INNERTEXT")
     end
     
-    def getTagByTitle(target_str)
-      taglist = get_tags_by_key(target_str, "VALUE")
+    def getElementByTitle(target_str)
+      taglist = get_elements_by_key(target_str, "VALUE")
       taglist[0]
     end
-    def getTagByValue(target_str)
-      taglist = get_tags_by_key(target_str, "VALUE")
+    def getElementByValue(target_str)
+      taglist = get_elements_by_key(target_str, "VALUE")
       taglist[0]
     end
-    def getTagByText(target_str)
-      taglist = get_tags_by_key(target_str, "INNERTEXT")
+    def getElementByText(target_str)
+      taglist = get_elements_by_key(target_str, "INNERTEXT")
       taglist[0]
     end
-    def getTagByName(target_str)
-      taglist = get_tags_by_key(target_str, "NAME")
+    def getElementByName(target_str)
+      taglist = get_elements_by_key(target_str, "NAME")
       taglist[0]
     end
     
     private
     
-    def get_tags_by_key(target_str, key_type)
+    def get_elements_by_key(target_str, key_type)
       tag_list = []
       @raw_object.all.each {|tag_element|
         case key_type
@@ -298,7 +302,12 @@ module IEgrip
     end
     
     def inspect
-      "<#{self.class}, Name:#{self.nodeName}>"
+      case self.nodeType
+      when 3
+        "<#{self.class}, Name:#{self.nodeName}, Text:#{self.wholeText.inspect}>"
+      else
+        "<#{self.class}, Name:#{self.nodeName}>"
+      end
     end
     
   end
@@ -321,7 +330,7 @@ module IEgrip
     
     def all
       raw_all = @raw_object.all
-      raw_all ? TagElementCollection.new(raw_all, @ie_obj) : nil
+      raw_all ? HTMLElementCollection.new(raw_all, @ie_obj) : nil
     end
     
     def frames(index=nil)
@@ -351,7 +360,7 @@ module IEgrip
   end
   
   # ========================
-  # TAG Element
+  # HTML Element
   # ========================
   class HTMLElement  < Node
     include ElementParent
@@ -368,7 +377,7 @@ module IEgrip
     def text=(set_text)
       case self.tagname
       when "select"
-        option_list = tags("OPTION")
+        option_list = elements("OPTION")
         option_list.each {|option_element|
           if option_element.innerText == set_text
             option_element.selected = true
@@ -379,6 +388,7 @@ module IEgrip
         @raw_object.value = set_text
       end
     end
+    
     
     def inspect()
       case tagName
@@ -438,7 +448,7 @@ module IEgrip
     end
     
     def all
-      TagElementCollection.new(@raw_object.all, @ie_obj)
+      HTMLElementCollection.new(@raw_object.all, @ie_obj)
     end
     
     
@@ -484,17 +494,48 @@ module IEgrip
     end
   end
   
+  
   # ========================
-  # TAG Element Collection
+  # Node Collection
   # ========================
-  class TagElementCollection  < GripWrapper
+  class NodeList  < GripWrapper
     def [](index)
       return(nil) if index >= @raw_object.length
-      HTMLElement.new(@raw_object.item(index), @ie_obj)
+      raw_node = @raw_object.item(index)
+      if raw_node.nodeType == 1
+        HTMLElement.new(raw_node, @ie_obj)
+      else
+        Node.new(raw_node, @ie_obj)
+      end
     end
     
     def size
       @raw_object.length
+    end
+    
+    def each
+      @raw_object.each {|raw_node|
+        if raw_node.nodeType == 1
+          yield HTMLElement.new(raw_node, @ie_obj)
+        else
+          yield Node.new(raw_node, @ie_obj)
+        end
+      }
+    end
+    
+    def inspect()
+      "<#{self.class}>"
+    end
+  end
+
+  # ========================
+  # TAG Element Collection
+  # ========================
+  class HTMLElementCollection < NodeList
+    def [](index)
+      return(nil) if index >= @raw_object.length
+      raw_node = @raw_object.item(index)
+      HTMLElement.new(raw_node, @ie_obj)
     end
     
     def each
@@ -504,51 +545,39 @@ module IEgrip
       }
     end
     
-    def getTagsByTitle(target_str)
-      get_tags_by_key(target_str, "VALUE")
+    def getElementsByTitle(target_str)
+      get_elements_by_key(target_str, "VALUE")
     end
-    def getTagsByValue(target_str)
-      get_tags_by_key(target_str, "VALUE")
+    def getElementsByValue(target_str)
+      get_elements_by_key(target_str, "VALUE")
     end
-    def getTagsByText(target_str)
-      get_tags_by_key(target_str, "INNERTEXT")
+    def getElementsByText(target_str)
+      get_elements_by_key(target_str, "INNERTEXT")
     end
-    def getTagsByName(target_str)
-      get_tags_by_key(target_str, "NAME")
-    end
-    
-    def getTagByTitle(target_str)
-      taglist = get_tags_by_key(target_str, "VALUE")
-      taglist ? taglist[0]: nil
-    end
-    def getTagByValue(target_str)
-      taglist = get_tags_by_key(target_str, "VALUE")
-      taglist ? taglist[0]: nil
-    end
-    def getTagByText(target_str)
-      taglist = get_tags_by_key(target_str, "INNERTEXT")
-      taglist ? taglist[0]: nil
-    end
-    def getTagByName(target_str)
-      taglist = get_tags_by_key(target_str, "NAME")
-      taglist ? taglist[0]: nil
+    def getElementsByName(target_str)
+      get_elements_by_key(target_str, "NAME")
     end
     
-    def inspect()
-      tagname_list = []
-      self.each {|tag_element|
-        tagname_list.push "<#{tag_element.tagName}>"
-      }
-      if tagname_list.size > 3
-        "<#{self.class}: [#{tagname_list[0,3].join(', ')},...]"
-      else
-        "<#{self.class}: [#{tagname_list.join(', ')}]>"
-      end
+    def getElementByTitle(target_str)
+      taglist = get_elements_by_key(target_str, "VALUE")
+      taglist ? taglist[0]: nil
+    end
+    def getElementByValue(target_str)
+      taglist = get_elements_by_key(target_str, "VALUE")
+      taglist ? taglist[0]: nil
+    end
+    def getElementByText(target_str)
+      taglist = get_elements_by_key(target_str, "INNERTEXT")
+      taglist ? taglist[0]: nil
+    end
+    def getElementByName(target_str)
+      taglist = get_elements_by_key(target_str, "NAME")
+      taglist ? taglist[0]: nil
     end
     
     private
     
-    def get_tags_by_key(target_str, key_type)
+    def get_elements_by_key(target_str, key_type)
       tag_list = []
       @raw_object.each {|tag_element|
         case key_type
@@ -574,9 +603,7 @@ module IEgrip
         return tag_list
       end
     end
-    
   end
-
 
   
   # ========================
