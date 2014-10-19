@@ -416,31 +416,7 @@ module IEgrip
     
     def click
       if @ie_obj.version >= 10
-        case self.tagname.downcase
-        when "a"
-          href = self.href
-          @ie_obj.navigate(href)
-        when "input"
-          if self.Type.downcase == "submit"
-            puts "**** Submit Type is detected."
-            parent_form = self.getParentForm()
-            if parent_form
-              puts "parent_form = #{parent_form.outerHTML}"
-              ret_val = parent_form.submit()
-              puts "parent_form.submit() submit is called. ret_val = #{ret_val.inspect}"
-              sleep 1
-              parent_form.raw.submit()
-              parent_form.fireEvent("onSubmit")
-              parent_form.fireEvent("onClick")
-            else
-              puts "parent_form not detected."
-            end
-          end
-        when "button"
-          @raw_object.fireEvent("onClick")
-        else
-          @raw_object.click
-        end
+        @raw_object.click(false)
       else
         @raw_object.click
       end
