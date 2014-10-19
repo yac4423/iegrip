@@ -199,11 +199,6 @@ module IEgrip
   end
   
   module GetElements
-    def getElementById(element_id)
-      raw_element = @raw_object.getElementById(element_id)
-      raw_element ? HTMLElement.new(raw_element, @ie_obj) : nil
-    end
-    
     def getElementsByName(name)
       raw_col = @raw_object.getElementsByName(name)
       raw_col ? HTMLElementCollection.new(raw_col, @ie_obj) : nil
@@ -340,6 +335,11 @@ module IEgrip
       else
         Frames.new(@raw_object.frames, @ie_obj)
       end
+    end
+    
+    def getElementById(element_id)
+      raw_element = @raw_object.getElementById(element_id)
+      raw_element ? HTMLElement.new(raw_element, @ie_obj) : nil
     end
     
     def documentElement
@@ -483,6 +483,32 @@ module IEgrip
     def removeAttributeNode( attr )
       raw_attr = @raw_object.removeAttributeNode( toRaw(attr) )
       raw_attr ? Attr.new(raw_attr, @ie_obj) : nil
+    end
+    
+    def insertBefore(newElement, anchor_element=nil)
+      @raw_object.insertBefore(toRaw(newElement), toRaw(anchor_element))
+    end
+    
+    def appendChild(newElement)
+      @raw_object.appendChild(toRaw(newElement))
+    end
+    
+    def removeChild(element)
+      @raw_object.removeChild(toRaw(element))
+    end
+    
+    def replaceChild(newElement, oldElement)
+      @raw_object.replaceChild(toRaw(newElement), toRaw(oldElement))
+    end
+    
+    def addElement(new_element)
+      parent = self.parentElement
+      next_element = self.nextSibling
+      if next_element
+        parent.insertBefore(new_element, next_element)
+      else
+        parent.appendChild(new_element)
+      end
     end
     
     private
