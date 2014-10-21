@@ -21,9 +21,9 @@ module IEgrip
       ver = fs.GetFileVersion(@raw_object.FullName)
       @majorVersion = ver.split(/\./)[0].to_i
       @urlDownloadToFile = Win32API.new('urlmon', 'URLDownloadToFileA', %w(l p p l l), 'l')
-      @event = WIN32OLE_EVENT.new(@raw_object,"DWebBrowserEvents2")
-      @downloading = nil
-      setup_event()
+      #@event = WIN32OLE_EVENT.new(@raw_object,"DWebBrowserEvents2")
+      @downloading = 0
+      #setup_event()
     end
     
     def version
@@ -42,13 +42,15 @@ module IEgrip
     
     COMPLETE_STATE = 4
     def wait_stable()
+      stable_counter = 0
       loop do
-        break if (@raw_object.Busy != true) and (@raw_object.ReadyState == COMPLETE_STATE)
-        WIN32OLE_EVENT.message_loop
-      end
-      loop do
-        break unless @downloading
-        WIN32OLE_EVENT.message_loop
+        break if stable_counter >= 3
+        if (@raw_object.Busy != true) and (@raw_object.ReadyState == COMPLETE_STATE)
+          stable_counter += 1
+        else
+          sleep 0.5
+          stable_counter = 0
+        end
       end
     end
     
@@ -60,8 +62,8 @@ module IEgrip
     
     def setup_event()
       @event.on_event("BeforeNavigate2") {
-        #puts "  BeforeNavigate2"
-        @downloading = true
+        @downloading += 1
+        #puts "  BeforeNavigate2. @downloading=#{@downloading}"
       }
       #@event.on_event("CommandStateChange") {
       #  puts "  CommandStateChange"
@@ -69,10 +71,11 @@ module IEgrip
       @event.on_event("DocumentComplete") {|param|
         # a document is completely loaded and initialized.
         if param.LocationURL == @raw_object.LocationURL
-          #puts "  DocumentComplete. LocationURL match! : #{param.LocationURL}"
-          @downloading = false
+          @downloading = 0
+          #puts "  DocumentComplete. LocationURL match! : #{param.LocationURL} @downloading=#{@downloading}"
         else
-          #puts "  DocumentComplete. "
+          @downloading -= 1 if @downloading > 0
+          #puts "  DocumentComplete. #{param.LocationURL} @downloading=#{@downloading}"
         end
       }
       #@event.on_event("DownloadBegin") {
