@@ -21,6 +21,9 @@ module IEgrip
       ver = fs.GetFileVersion(@raw_object.FullName)
       @majorVersion = ver.split(/\./)[0].to_i
       @urlDownloadToFile = Win32API.new('urlmon', 'URLDownloadToFileA', %w(l p p l l), 'l')
+      @event = WIN32OLE_EVENT.new(@raw_object,"DWebBrowserEvents2")
+      @downloading = nil
+      setup_event()
     end
     
     def version
@@ -39,20 +42,68 @@ module IEgrip
     
     COMPLETE_STATE = 4
     def wait_stable()
-      stable_counter = 0
       loop do
-        break if stable_counter >= 3
-        if (@raw_object.Busy != true) and (@raw_object.ReadyState == COMPLETE_STATE)
-          stable_counter += 1
-        else
-          sleep 0.5
-          stable_counter = 0
-        end
+        break if (@raw_object.Busy != true) and (@raw_object.ReadyState == COMPLETE_STATE)
+        WIN32OLE_EVENT.message_loop
+      end
+      loop do
+        break unless @downloading
+        WIN32OLE_EVENT.message_loop
       end
     end
     
     def export(href, filename)
       @urlDownloadToFile.call(0, href, filename, 0, 0)
+    end
+    
+    private
+    
+    def setup_event()
+      @event.on_event("BeforeNavigate2") {
+        #puts "  BeforeNavigate2"
+        @downloading = true
+      }
+      #@event.on_event("CommandStateChange") {
+      #  puts "  CommandStateChange"
+      #}
+      @event.on_event("DocumentComplete") {|param|
+        # a document is completely loaded and initialized.
+        if param.LocationURL == @raw_object.LocationURL
+          #puts "  DocumentComplete. LocationURL match! : #{param.LocationURL}"
+          @downloading = false
+        else
+          #puts "  DocumentComplete. "
+        end
+      }
+      #@event.on_event("DownloadBegin") {
+      #  # a navigation operation begins.
+      #  puts "  DownloadBegin. "
+      #}
+      #@event.on_event("DownloadComplete") { 
+      #  # a navigation operation finishes, is halted, or fails.
+      #  puts "  Download Complete."
+      #}
+      #@event.on_event("NavigateComplete2") {
+      #  # a navigation to a link is completed on a window element or a frameSet element.
+      #  puts "  NavigateComplete2."
+      #}
+      #@event.on_event("NewProcess") {
+      #  puts "  NewProcess"
+      #}
+      #@event.on_event("ProgressChange") {
+      #  puts "  ProgressChange"
+      #}
+      #@event.on_event("PropertyChange") {
+      #  puts "  PropertyChange"
+      #}
+      #@event.on_event("StatusTextChange") {
+      #  puts "  StatusTextChange"
+      #}
+      #@event.on_event("UpdatePageStatus") {
+      #  puts "  UpdatePageStatus"
+      #}
+      
+      
     end
   end
   
@@ -171,7 +222,11 @@ module IEgrip
       when "img"
         inner.push "src='#{tag.src}'"
       when "input"
-        inner.push "type='#{tag.Type}'"
+        attr_list = []
+        attr_list.push("type='#{tag.Type}'")
+        attr_list.push("name='#{tag.Name}'")   if tag.Name != ""
+        attr_list.push("value='#{tag.value}'") if tag.value != ""
+        inner.push attr_list.join(" ")
       when "form"
         inner.push "action='#{tag.action}' method='#{tag.Method}'"
       when "option"
