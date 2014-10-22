@@ -21,9 +21,8 @@ module IEgrip
       ver = fs.GetFileVersion(@raw_object.FullName)
       @majorVersion = ver.split(/\./)[0].to_i
       @urlDownloadToFile = Win32API.new('urlmon', 'URLDownloadToFileA', %w(l p p l l), 'l')
-      #@event = WIN32OLE_EVENT.new(@raw_object,"DWebBrowserEvents2")
-      @downloading = 0
-      #setup_event()
+      @event = WIN32OLE_EVENT.new(@raw_object,"DWebBrowserEvents2")
+      setup_event()
     end
     
     def version
@@ -42,15 +41,19 @@ module IEgrip
     
     COMPLETE_STATE = 4
     def wait_stable()
-      stable_counter = 0
+      @complete_flag = false
       loop do
-        break if stable_counter >= 3
-        if (@raw_object.Busy != true) and (@raw_object.ReadyState == COMPLETE_STATE)
-          stable_counter += 1
-        else
-          sleep 0.5
-          stable_counter = 0
+        #p [@raw_object.Busy, @raw_object.ReadyState]
+        if (@raw_object.Busy == false) and (@raw_object.ReadyState == COMPLETE_STATE)
+          break
         end
+        WIN32OLE_EVENT.message_loop
+        sleep 0.1
+      end
+      loop do
+        #puts "@complete_flag = #{@complete_flag}"
+        WIN32OLE_EVENT.message_loop
+        break if @complete_flag
       end
     end
     
@@ -61,21 +64,19 @@ module IEgrip
     private
     
     def setup_event()
-      @event.on_event("BeforeNavigate2") {
-        @downloading += 1
-        #puts "  BeforeNavigate2. @downloading=#{@downloading}"
-      }
+      #@event.on_event("BeforeNavigate2") {
+      #  puts "  BeforeNavigate2. @downloading=#{@downloading}"
+      #}
       #@event.on_event("CommandStateChange") {
       #  puts "  CommandStateChange"
       #}
       @event.on_event("DocumentComplete") {|param|
         # a document is completely loaded and initialized.
-        if param.LocationURL == @raw_object.LocationURL
-          @downloading = 0
-          #puts "  DocumentComplete. LocationURL match! : #{param.LocationURL} @downloading=#{@downloading}"
-        else
-          @downloading -= 1 if @downloading > 0
-          #puts "  DocumentComplete. #{param.LocationURL} @downloading=#{@downloading}"
+        puts "  DocumentComplete. #{param.LocationURL}"
+        if @location_url == param.LocationURL
+          puts "Complete!!!"
+          @location_url = nil
+          @complete_flag = true
         end
       }
       #@event.on_event("DownloadBegin") {
@@ -86,10 +87,15 @@ module IEgrip
       #  # a navigation operation finishes, is halted, or fails.
       #  puts "  Download Complete."
       #}
-      #@event.on_event("NavigateComplete2") {
-      #  # a navigation to a link is completed on a window element or a frameSet element.
-      #  puts "  NavigateComplete2."
-      #}
+      @event.on_event("NavigateComplete2") {|param|
+        # a navigation to a link is completed on a window element or a frameSet element.
+        if @location_url  # Keep First location
+          puts "  Secondary NavigateComplete2. param.LocationURL = #{param.LocationURL}"
+        else
+          puts "  First NavigateComplete2. param.LocationURL = #{param.LocationURL}"
+          @location_url = param.LocationURL
+        end
+      }
       #@event.on_event("NewProcess") {
       #  puts "  NewProcess"
       #}
