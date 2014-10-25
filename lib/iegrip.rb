@@ -34,27 +34,26 @@ module IEgrip
     end
     
     def navigate(url)
+      before_wait()
       @raw_object.navigate(url)
-      sleep 0.5
       wait_stable()
     end
     
+    def before_wait()
+      @location_url = nil
+      @complete_flag = nil
+    end
+    
     COMPLETE_STATE = 4
-    def wait_stable()
-      @complete_flag = false
+    def wait_stable(timeout=30)
+      puts "wait_stable() start...."
+      start_time = Time.now
       loop do
-        #p [@raw_object.Busy, @raw_object.ReadyState]
-        if (@raw_object.Busy == false) and (@raw_object.ReadyState == COMPLETE_STATE)
-          break
-        end
-        WIN32OLE_EVENT.message_loop
-        sleep 0.1
-      end
-      loop do
-        #puts "@complete_flag = #{@complete_flag}"
-        WIN32OLE_EVENT.message_loop
         break if @complete_flag
+        break if (Time.now - start_time) > timeout
+        WIN32OLE_EVENT.message_loop
       end
+      puts "wait_stable() Complete...."
     end
     
     def export(href, filename)
@@ -64,31 +63,7 @@ module IEgrip
     private
     
     def setup_event()
-      #@event.on_event("BeforeNavigate2") {
-      #  puts "  BeforeNavigate2. @downloading=#{@downloading}"
-      #}
-      #@event.on_event("CommandStateChange") {
-      #  puts "  CommandStateChange"
-      #}
-      @event.on_event("DocumentComplete") {|param|
-        # a document is completely loaded and initialized.
-        puts "  DocumentComplete. #{param.LocationURL}"
-        if @location_url == param.LocationURL
-          puts "Complete!!!"
-          @location_url = nil
-          @complete_flag = true
-        end
-      }
-      #@event.on_event("DownloadBegin") {
-      #  # a navigation operation begins.
-      #  puts "  DownloadBegin. "
-      #}
-      #@event.on_event("DownloadComplete") { 
-      #  # a navigation operation finishes, is halted, or fails.
-      #  puts "  Download Complete."
-      #}
       @event.on_event("NavigateComplete2") {|param|
-        # a navigation to a link is completed on a window element or a frameSet element.
         if @location_url  # Keep First location
           puts "  Secondary NavigateComplete2. param.LocationURL = #{param.LocationURL}"
         else
@@ -96,23 +71,13 @@ module IEgrip
           @location_url = param.LocationURL
         end
       }
-      #@event.on_event("NewProcess") {
-      #  puts "  NewProcess"
-      #}
-      #@event.on_event("ProgressChange") {
-      #  puts "  ProgressChange"
-      #}
-      #@event.on_event("PropertyChange") {
-      #  puts "  PropertyChange"
-      #}
-      #@event.on_event("StatusTextChange") {
-      #  puts "  StatusTextChange"
-      #}
-      #@event.on_event("UpdatePageStatus") {
-      #  puts "  UpdatePageStatus"
-      #}
-      
-      
+      @event.on_event("DocumentComplete") {|param|
+        puts "  DocumentComplete. #{param.LocationURL}"
+        if @location_url == param.LocationURL
+          puts "  Complete!!!"
+          @complete_flag = true
+        end
+      }
     end
   end
   
@@ -479,6 +444,7 @@ module IEgrip
     alias text value
     
     def click
+      @ie_obj.before_wait()
       if @ie_obj.version >= 10
         @raw_object.click(false)
       else
