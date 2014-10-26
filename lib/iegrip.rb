@@ -46,14 +46,12 @@ module IEgrip
     
     COMPLETE_STATE = 4
     def wait_stable(timeout=30)
-      puts "wait_stable() start...."
       start_time = Time.now
       loop do
         break if @complete_flag
         break if (Time.now - start_time) > timeout
         WIN32OLE_EVENT.message_loop
       end
-      puts "wait_stable() Complete...."
     end
     
     def export(href, filename)
@@ -64,17 +62,12 @@ module IEgrip
     
     def setup_event()
       @event.on_event("NavigateComplete2") {|param|
-        if @location_url  # Keep First location
-          puts "  Secondary NavigateComplete2. param.LocationURL = #{param.LocationURL}"
-        else
-          puts "  First NavigateComplete2. param.LocationURL = #{param.LocationURL}"
+        unless @location_url  # Keep First location
           @location_url = param.LocationURL
         end
       }
       @event.on_event("DocumentComplete") {|param|
-        puts "  DocumentComplete. #{param.LocationURL}"
         if @location_url == param.LocationURL
-          puts "  Complete!!!"
           @complete_flag = true
         end
       }
@@ -184,6 +177,7 @@ module IEgrip
     
     def get_inner(tag)
       inner = [tag.tagName]
+      
       outer = nil
       inner.push "id='#{tag.ID}'" if tag.ID != ""
       case tag.tagName
@@ -515,6 +509,10 @@ module IEgrip
       else
         parent.appendChild(new_element)
       end
+    end
+    
+    def document
+      Document.new(@raw_object.document, @ie_obj)
     end
     
     private
