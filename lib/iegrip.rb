@@ -21,9 +21,10 @@ module IEgrip
       ver = fs.GetFileVersion(@raw_object.FullName)
       @majorVersion = ver.split(/\./)[0].to_i
       @urlDownloadToFile = Win32API.new('urlmon', 'URLDownloadToFileA', %w(l p p l l), 'l')
-      @event = WIN32OLE_EVENT.new(@raw_object,"DWebBrowserEvents2")
-      setup_event()
+      @timeout = 15
     end
+    
+    attr_accessor :timeout
     
     def version
       @majorVersion
@@ -34,23 +35,15 @@ module IEgrip
     end
     
     def navigate(url)
-      before_wait()
       @raw_object.navigate(url)
-      wait_stable()
-    end
-    
-    def before_wait()
-      @location_url = nil
-      @complete_flag = nil
+      #wait_stable()
     end
     
     COMPLETE_STATE = 4
-    def wait_stable(timeout=30)
-      start_time = Time.now
+    def wait_stable()
       loop do
-        break if @complete_flag
-        break if (Time.now - start_time) > timeout
-        WIN32OLE_EVENT.message_loop
+        break if (@raw_object.Busy != true) and (@raw_object.ReadyState == COMPLETE_STATE)
+        sleep 0.5
       end
     end
     
@@ -58,19 +51,40 @@ module IEgrip
       @urlDownloadToFile.call(0, href, filename, 0, 0)
     end
     
-    private
+  end
+  
+  module Retry
+    RETRY_INTERVAL = 0.1
+    def retryGetTarget(&proc)
+      puts "retryGetTarget() start.... proc = #{proc.inspect}"
+      retry_count = (@ie_obj.timeout / RETRY_INTERVAL).to_i
+      retry_count.times do
+        target = proc.call
+        puts "  in retryGetTarget(), target = #{target.inspect}"
+        if target
+          puts "retryGetTarget() Success fin."
+          return target 
+        end
+        sleep RETRY_INTERVAL
+      end
+      puts "retryGetTarget(), return nil."
+      return nil
+    end
     
-    def setup_event()
-      @event.on_event("NavigateComplete2") {|param|
-        unless @location_url  # Keep First location
-          @location_url = param.LocationURL
+    def retryCheck(&proc)
+      puts "retryCheck() start...."
+      retry_count = (@ie_obj.timeout / RETRY_INTERVAL).to_i
+      retry_count.times do
+        check_result = proc.call
+        puts "  in retryCheck(), check_result = #{check_result.inspect}"
+        if check_result
+          puts "retryCheck() Success fin."
+          return check_result 
         end
-      }
-      @event.on_event("DocumentComplete") {|param|
-        if @location_url == param.LocationURL
-          @complete_flag = true
-        end
-      }
+        sleep RETRY_INTERVAL
+      end
+      puts "retryCheck(), return nil."
+      return nil
     end
   end
   
@@ -100,53 +114,69 @@ module IEgrip
   end
   
   module ElementChild
+    include Retry
+    
     def childNodes
-      raw_childNodes = @raw_object.childNodes
-      raw_childNodes ? NodeList.new(raw_childNodes, @ie_obj) : nil
+      retryGetTarget {
+        raw_childNodes = @raw_object.childNodes
+        raw_childNodes ? NodeList.new(raw_childNodes, @ie_obj) : nil
+      }
     end
     
     def childElements
-      raw_childNodes = @raw_object.childNodes
-      raw_childNodes ? HTMLElementCollection.new(raw_childNodes, @ie_obj) : nil
+      retryGetTarget {
+        raw_childNodes = @raw_object.childNodes
+        raw_childNodes ? HTMLElementCollection.new(raw_childNodes, @ie_obj) : nil
+      }
     end
     
     def previousSibling
-      raw_node = @raw_object.previousSibling()
-      raw_node ? HTMLElement.new(raw_node, @ie_obj) : nil
+      retryGetTarget {
+        raw_node = @raw_object.previousSibling()
+        raw_node ? switch_node_and_element(raw_node) : nil
+      }
     end
     
     def nextSibling
-      raw_node = @raw_object.nextSibling()
-      raw_node ? HTMLElement.new(raw_node, @ie_obj) : nil
+      retryGetTarget {
+        raw_node = @raw_object.nextSibling()
+        raw_node ? switch_node_and_element(raw_node) : nil
+      }
     end
     
     def firstChild
-      raw_node = @raw_object.firstChild()
-      raw_node ? HTMLElement.new(raw_node, @ie_obj) : nil
+      retryGetTarget {
+        raw_node = @raw_object.firstChild()
+        raw_node ? switch_node_and_element(raw_node) : nil
+      }
     end
     
     def lastChild
-      raw_node = @raw_object.lastChild()
-      raw_node ? HTMLElement.new(raw_node, @ie_obj) : nil
+      retryGetTarget {
+        raw_node = @raw_object.lastChild()
+        raw_node ? switch_node_and_element(raw_node) : nil
+      }
     end
     
     def hasChildNodes()
-      @raw_object.childNodes.length > 0
+      chileNodes = retryGetTarget {@raw_object.childNodes}
+      chileNodes.length > 0
     end
     
     def hasChildElements()
-      @raw_object.childNodes.each {|subnode|
+      chileNodes = retryGetTarget {@raw_object.childNodes}
+      chileNodes.each {|subnode|
         return true if (subnode.nodeType != 3) and (subnode.nodeType != 8)
       }
       false
     end
     
     def contains(node)
-      @raw_object.contains(toRaw(node))
+      retryCheck { @raw_object.contains(toRaw(node)) }
     end
     
     def isEqualNode(node)
-      @raw_object.isEqualNode(toRaw(node))
+      retryCheck { @raw_object.isEqualNode(toRaw(node)) }
     end
     
     def struct(level=0)
@@ -201,6 +231,11 @@ module IEgrip
         inner.push "value='#{tag.value}'"
       when "style"
         inner.push "type='#{tag.Type}'"
+      when "script"
+        inner.push "src='#{tag.src}'" if tag.src != ""
+      when "frame"
+        inner.push "src='#{tag.src}'" if tag.src != ""
+        inner.push "name='#{tag.name}'" if tag.name != ""
       end
       unless tag.hasChildElements
         innerText = tag.innerText
@@ -219,46 +254,68 @@ module IEgrip
       end
       return [inner.join(' '), outer]
     end
+    
+    def switch_node_and_element(raw_node)
+      if raw_node.nodeType == 1
+        HTMLElement.new(raw_node, @ie_obj)
+      else
+        Node.new(raw_node, @ie_obj)
+      end
+    end
   end
   
   module GetElements
+    include Retry
+    
     def getElementsByName(name)
-      raw_col = @raw_object.getElementsByName(name)
-      raw_col ? HTMLElementCollection.new(raw_col, @ie_obj) : nil
+      retryGetTarget {
+        raw_col = @raw_object.getElementsByName(name)
+        raw_col ? HTMLElementCollection.new(raw_col, @ie_obj) : nil
+      }
     end
     
     
     def getElementsByTagName(tag_name)
-      raw_col = @raw_object.getElementsByTagName(tag_name)
-      raw_col ? HTMLElementCollection.new(raw_col, @ie_obj) : nil
+      retryGetTarget {
+        raw_col = @raw_object.getElementsByTagName(tag_name)
+        raw_col ? HTMLElementCollection.new(raw_col, @ie_obj) : nil
+      }
     end
     alias elements getElementsByTagName
     
     def getElementsByTitle(target_str)
-      get_elements_by_key(target_str, "VALUE")
+      retryGetTarget { get_elements_by_key(target_str, "VALUE") }
     end
     def getElementsByValue(target_str)
-      get_elements_by_key(target_str, "VALUE")
+      retryGetTarget { get_elements_by_key(target_str, "VALUE") }
     end
     def getElementsByText(target_str)
-      get_elements_by_key(target_str, "INNERTEXT")
+      retryGetTarget { get_elements_by_key(target_str, "INNERTEXT") }
     end
     
     def getElementByTitle(target_str)
-      taglist = get_elements_by_key(target_str, "VALUE")
-      taglist[0]
+      retryGetTarget { 
+        taglist = get_elements_by_key(target_str, "VALUE")
+        taglist[0]
+      }
     end
     def getElementByValue(target_str)
-      taglist = get_elements_by_key(target_str, "VALUE")
-      taglist[0]
+      retryGetTarget { 
+        taglist = get_elements_by_key(target_str, "VALUE")
+        taglist[0]
+      }
     end
     def getElementByText(target_str)
-      taglist = get_elements_by_key(target_str, "INNERTEXT")
-      taglist[0]
+      retryGetTarget { 
+        taglist = get_elements_by_key(target_str, "INNERTEXT")
+        taglist[0]
+      }
     end
     def getElementByName(target_str)
-      taglist = get_elements_by_key(target_str, "NAME")
-      taglist[0]
+      retryGetTarget { 
+        taglist = get_elements_by_key(target_str, "NAME")
+        taglist[0]
+      }
     end
     
     private
@@ -286,6 +343,7 @@ module IEgrip
       return tag_list
     end
   end
+  
   
   # ========================
   # Node
@@ -336,24 +394,34 @@ module IEgrip
   class Document  < Node
     include ElementChild
     include GetElements
+    include Retry
     
     def head()
-      raw_head = @raw_object.head
-      raw_head ? HTMLElement.new(raw_head, @ie_obj) : nil
+      retryGetTarget { 
+        raw_head = @raw_object.head
+        raw_head ? HTMLElement.new(raw_head, @ie_obj) : nil
+      }
     end
     
     def body()
-      HTMLElement.new(@raw_object.body, @ie_obj)
+      retryGetTarget {
+        raw_body = @raw_object.body
+        raw_body ? HTMLElement.new(@raw_object.body, @ie_obj) : nil
+      }
     end
     
     def all
-      raw_all = @raw_object.all
-      raw_all ? HTMLElementCollection.new(raw_all, @ie_obj) : nil
+      retryGetTarget {
+        raw_all = @raw_object.all
+        raw_all ? HTMLElementCollection.new(raw_all, @ie_obj) : nil
+      }
     end
     
     def frames(index=nil)
       if index
-        return(nil) if index >= @raw_object.Frames.length
+        frames = retryGetTarget { @raw_object.Frames }
+        return nil unless frames
+        return nil if index >= frames.length
         Frames.new(@raw_object.frames, @ie_obj)[index]
       else
         Frames.new(@raw_object.frames, @ie_obj)
@@ -361,13 +429,17 @@ module IEgrip
     end
     
     def getElementById(element_id)
-      raw_element = @raw_object.getElementById(element_id)
-      raw_element ? HTMLElement.new(raw_element, @ie_obj) : nil
+      retryGetTarget {
+        raw_element = @raw_object.getElementById(element_id)
+        raw_element ? HTMLElement.new(raw_element, @ie_obj) : nil
+      }
     end
     
     def documentElement
-      raw_element = @raw_object.documentElement()
-      raw_element ? HTMLElement.new(raw_element, @ie_obj) : nil
+      retryGetTarget {
+        raw_element = @raw_object.documentElement()
+        raw_element ? HTMLElement.new(raw_element, @ie_obj) : nil
+      }
     end
     
     def createElement(tag_name)
@@ -376,7 +448,7 @@ module IEgrip
     end
     
     def createAttribute(attr_name)
-      raw_attr = @raw_object.createAttribute(attr_name);
+      raw_attr = @raw_object.createAttribute(attr_name)
       Attr.new(raw_attr, @ie_obj)
     end
     
@@ -389,6 +461,8 @@ module IEgrip
     include ElementParent
     include ElementChild
     include GetElements
+    include Retry
+    
     def tagname
       if self.nodeType == 8
         "comment"
@@ -438,7 +512,6 @@ module IEgrip
     alias text value
     
     def click
-      @ie_obj.before_wait()
       if @ie_obj.version >= 10
         @raw_object.click(false)
       else
@@ -448,7 +521,8 @@ module IEgrip
     end
     
     def all
-      HTMLElementCollection.new(@raw_object.all, @ie_obj)
+      all_element = retyGetElement { @raw_object.all }
+      HTMLElementCollection.new(all_element, @ie_obj)
     end
     
     
@@ -512,7 +586,8 @@ module IEgrip
     end
     
     def document
-      Document.new(@raw_object.document, @ie_obj)
+      document = retryGettarget { @raw_object.document }
+      document ? Document.new(document, @ie_obj) : nil
     end
     
     private
@@ -530,7 +605,8 @@ module IEgrip
   # ========================
   class NodeList  < GripWrapper
     def [](index)
-      return(nil) if index >= @raw_object.length
+      result = retryCheck { index < @raw_object.length }
+      return(nil) unless result
       raw_node = @raw_object.item(index)
       if raw_node.nodeType == 1
         HTMLElement.new(raw_node, @ie_obj)
@@ -562,8 +638,11 @@ module IEgrip
   # TAG Element Collection
   # ========================
   class HTMLElementCollection < NodeList
+    include Retry
+    
     def [](index)
-      return(nil) if index >= @raw_object.length
+      result = retryCheck { index < @raw_object.length }
+      return(nil) unless result
       raw_node = @raw_object.item(index)
       HTMLElement.new(raw_node, @ie_obj)
     end
@@ -576,32 +655,32 @@ module IEgrip
     end
     
     def getElementsByTitle(target_str)
-      get_elements_by_key(target_str, "VALUE")
+      retryGetTarget { get_elements_by_key(target_str, "VALUE") }
     end
     def getElementsByValue(target_str)
-      get_elements_by_key(target_str, "VALUE")
+      retryGetTarget { get_elements_by_key(target_str, "VALUE") }
     end
     def getElementsByText(target_str)
-      get_elements_by_key(target_str, "INNERTEXT")
+      retryGetTarget { get_elements_by_key(target_str, "INNERTEXT") }
     end
     def getElementsByName(target_str)
-      get_elements_by_key(target_str, "NAME")
+      retryGetTarget { get_elements_by_key(target_str, "NAME") }
     end
     
     def getElementByTitle(target_str)
-      taglist = get_elements_by_key(target_str, "VALUE")
+      taglist = retryGetTarget { get_elements_by_key(target_str, "VALUE") }
       taglist ? taglist[0]: nil
     end
     def getElementByValue(target_str)
-      taglist = get_elements_by_key(target_str, "VALUE")
+      taglist = retryGetTarget { get_elements_by_key(target_str, "VALUE") }
       taglist ? taglist[0]: nil
     end
     def getElementByText(target_str)
-      taglist = get_elements_by_key(target_str, "INNERTEXT")
+      taglist = retryGetTarget { get_elements_by_key(target_str, "INNERTEXT") }
       taglist ? taglist[0]: nil
     end
     def getElementByName(target_str)
-      taglist = get_elements_by_key(target_str, "NAME")
+      taglist = retryGetTarget { get_elements_by_key(target_str, "NAME") }
       taglist ? taglist[0]: nil
     end
     
@@ -640,8 +719,12 @@ module IEgrip
   # IE.Document.Frames
   # ========================
   class Frames  < GripWrapper
+    include Retry
+    
     def [](index)
-      return(nil) if index >= @raw_object.length
+      result = retryCheck { index < @raw_object.length }
+      return(nil) unless result
+      
       Frame.new(@raw_object.item(index), @ie_obj)
     end
     
@@ -663,8 +746,11 @@ module IEgrip
   # IE.Document.Frames.item(n)
   # ========================
   class Frame  < GripWrapper
+    include Retry
+    
     def document
-      Document.new(@raw_object.document, @ie_obj)
+      document = retryGetTarget { @raw_object.document }
+      document ? Document.new(document, @ie_obj) : nil
     end
   end
   
