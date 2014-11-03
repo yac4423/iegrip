@@ -36,7 +36,7 @@ module IEgrip
     
     def navigate(url)
       @raw_object.navigate(url)
-      #wait_stable()
+      wait_stable()
     end
     
     COMPLETE_STATE = 4
@@ -56,34 +56,34 @@ module IEgrip
   module Retry
     RETRY_INTERVAL = 0.1
     def retryGetTarget(&proc)
-      puts "retryGetTarget() start.... proc = #{proc.inspect}"
+      #puts "retryGetTarget() start.... proc = #{proc.inspect}"
       retry_count = (@ie_obj.timeout / RETRY_INTERVAL).to_i
       retry_count.times do
         target = proc.call
-        puts "  in retryGetTarget(), target = #{target.inspect}"
+        #puts "  in retryGetTarget(), target = #{target.inspect}"
         if target
           puts "retryGetTarget() Success fin."
           return target 
         end
         sleep RETRY_INTERVAL
       end
-      puts "retryGetTarget(), return nil."
+      #puts "retryGetTarget(), return nil."
       return nil
     end
     
     def retryCheck(&proc)
-      puts "retryCheck() start...."
+      #puts "retryCheck() start...."
       retry_count = (@ie_obj.timeout / RETRY_INTERVAL).to_i
       retry_count.times do
         check_result = proc.call
-        puts "  in retryCheck(), check_result = #{check_result.inspect}"
+        #puts "  in retryCheck(), check_result = #{check_result.inspect}"
         if check_result
-          puts "retryCheck() Success fin."
+          #puts "retryCheck() Success fin."
           return check_result 
         end
         sleep RETRY_INTERVAL
       end
-      puts "retryCheck(), return nil."
+      #puts "retryCheck(), return nil."
       return nil
     end
   end
