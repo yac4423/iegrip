@@ -62,7 +62,7 @@ module IEgrip
         target = proc.call
         #puts "  in retryGetTarget(), target = #{target.inspect}"
         if target
-          puts "retryGetTarget() Success fin."
+          #puts "retryGetTarget() Success fin."
           return target 
         end
         sleep RETRY_INTERVAL
