@@ -1,199 +1,27 @@
-= NotesGrip
-Notesgrip is Ruby library to handle all Notes classes.
+= IEGrip
+IEgrip is Ruby library to control Internet Explorer(IE).
 * Windows Only
-* Necessary Notes Clinet(all version OK. R4.6-R9)
 
 = Installation
-  # gem install notesgrip
+  # gem install iegrip
 
 = Usage
-  require 'notesgrip'
-  ns = Notesgrip::NotesSession.new
-  db = ns.database("myserver", "mydb.nsf")
-  db.each_document {|doc|
-    p doc
+  require 'iegrip'
+  ie = IEgrip::IE.new
+  ie.navigate("www.yahoo.com")
+  stream = ie.document.getElementByID("stream")
+  stream.elements("a")[0].childNodes.each {|tag|
+    p tag
   }
-
+  
+  
 = Documentation
-In RubyDoc.Info, all Notesgrip classes are Listed.
-http://rubydoc.info/gems/notesgrip/
+In RubyDoc.Info, all IEgrip classes are listed.
+http://rubydoc.info/gems/iegrip/
 
-== Notesgrip::Notes_Wrapper
-Base class of all Notesgrip classes. 
-This class wraps a various Notes objects.
-=== Methods
-[raw]
-  Return raw Notes object which is wrapped by Notesgrip object.
 
-== Notesgrip::NotesSession class
-Wrap NotesSession object to use all properties and methods of NotesSession class.
-  ns = NotesGrip::NotesSession.new
-  p ns.NotesVersion # -> "Release 9.0|March 08, 2013             "
-  db = ns.getDatabase("servername", "dbname.nsf")
-
-=== Additional Methods
-[database(server, dbfilename, createonfail=false)]
-  Alias of GetDatabse().
-[each_database(server) {|database| block}]
-  Calls the given block for each database on server.
-    ns = NotesGrip::NotesSession.new
-    ns.each_database("myserver") {|db|
-      p db
-    }
-
-== Notesgrip:NotesDatabase class
-Wrap NotesDatabase object.
-  ns = NotesGrip::NotesSession.new
-  db = ns.getDatabase("servername", "dbname.nsf")
-  puts "Title:#{db.Title}, Size:#{db.Size}" # Title:tech's Directory, Size:23330816.0
-  
-=== Additional Methods
-[CreateDocument(formName=nil)]
-  Create new NotesDocument and set form name. Return Notesgrip::NotesDocument.
-[name()]
-  Alias of Title().
-[open?()]
-  Alias of IsOpen().
-[each_document {|doc| block}]
-  Calls the given block for each document in database.
-    db.each_document {|doc|
-      p doc
-    }
-[each_view {|view| block}]
-  Calls the given block for each view in database.
-    db.each_view {|view|
-      p view
-    }
-[each_form {|form| block}]
-  Calls the given block for each form in database.
-    db.each_form {|form|
-      p form
-    }
-[each_agent {|agent| agent}]
-  Calls the given block for each agent in database.
-    db.each_agent {|agent|
-      p agent
-    }
-[each_profile {|profile| block}]
-  Calls the given block for each profile in database.
-    db.each_profile {|profile|
-      p profile
-    }
-  
-== Notesgrip:NotesView class
-Wrap NotesView object.
-  ns = NotesGrip::NotesSession.new
-  db = ns.getDatabase("servername", "dbname.nsf")
-  view = db.view("All")
-  p view.Count
-=== Additional Methods
-[each_document {|doc| block}]
-  Calls the given block for each document in the view.
-    view = db.view("All")
-    view.each_document {|doc|
-      p doc
-    }
-[[index]]
-  Return the document at index.
-[each_entry {|entry| block}]
-  Calls the given block for each entry in the view.
-    view = db.view("All")
-    view.each_entry {|entry|
-      p entry
-    }
-[each_column {|column| block}]
-  Calls the given block for each column in the view.
-    view = db.view("All")
-    view.each_column {|entry|
-      p entry
-    }
-[UNID]
-  Alias of UniversalID().
-[count]
-[size]
-  Return count of entries of view.
-  
-=== Notesgrip:NotesDocumentCollection class
-Wrap NotesDocumentCollection object.
-  ns = NotesGrip::NotesSession.new
-  db = ns.getDatabase("servername", "dbname.nsf")
-  view = db.view("ByDate")
-  docList = view.GetAllDocumentsByKey("2014/04/20", true)
-  p docList.size # count of documents in NotesDocumentCollection
-=== Additional Methods
-[each_document {|doc| block}]
-  Calls the given block for each document in the view.
-    docList = view.GetAllDocumentsByKey("2014/04/20", true)
-    docList.each_document {|doc|
-      p doc
-    }
-[[index]]
-  Return the document at index.
-
-== Notesgrip:NotesDocument class
-Wrap NotesDocument object.
-  ns = NotesGrip::NotesSession.new
-  db = ns.getDatabase("servername", "dbname.nsf")
-  doc = db.CreateDocument("main")
-  doc['subject'].text = "Sample-001"
-  doc.save
-=== Additional Methods
-[unid]
-  Alias of UniversalID().
-[[itemname]]
-  Return Notesgrip::NotesItem object which is identified by itemname in the document.
-  If item type is richtext, return Notesgrip::NotesRichTextItem object.
-[[itemname]=other_item]
-  Copy other NotesItem with given item name.
-[each_item{|item| block}]
-  Calls the given block for each NotesItem in my document.
-
-== Notesgrip:NotesItem class
-Wrap NotesItem object.
-  ns = NotesGrip::NotesSession.new
-  db = ns.getDatabase("servername", "dbname.nsf")
-  db.each_document {|doc|
-    item = doc["subject"]
-    p item.text
-  }
-===Additional Methods
-[Values=item_value, text=item_value]
-  Copy item_value into my field. You can set Array into the field.
-[each_value {|value| block}]
-  Calls the given block for each item value in the field.
-[to_s]
-  Return text string in the field.
-[EmbeddedObjects]
-  Return [], because the field type is TEXT.
-
-== Notesgrip:NotesRichTextItem class
-Wrap NotesRichTextItem object. This class is sub class of Notesgrip::NotesItem.
-  ns = NotesGrip::NotesSession.new
-  db = ns.getDatabase("servername", "dbname.nsf")
-  view = db.view("All")
-  doc = view.GetFirstDocument
-  doc["Body"].add_file("./sample.pdf")  # Body is RichText Field.
-  doc.save
-===Additional Methods
-[Values=item_value, text=item_value]
-  Copy item_value into my field. You can set Array into the field.
-[each_value {|value| block}]
-  Calls the given block for each item value in the field.
-[to_s]
-  Return text string in the field.
-[EmbeddedObjects]
-  Return array of Notesgrip::NotesEmbeddedObject in the RichText field.
-  Return [] if this field has no Embedded object.
-[each_embeddedFile]
-  Calls the given block for each file type embedded object in the field.
-[each_embeddedLink]
-  Calls the given block for each link type embedded object in the field.
-[each_embeddedOLE]
-  Calls the given block for each OLE type embedded object in the field.
-
-  
 = Author
-notesgrip@tech-notes.dyndns.org
+yac@tech-notes.dyndns.org
 
 = License
 MIT

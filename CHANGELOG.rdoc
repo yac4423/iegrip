@@ -1,0 +1,14 @@
+== 0.1.7 (2014/11/03)
+[Comment:]
+  * Modify README
+  * Add CHANGELOG
+
+== 0.1.6 (2014/11/03)
+[Bugfix:]
+  * Commentout debug message.
+
+== 0.1.5 (2014/11/03)
+[Feature:]
+  * Add Retry method to getElement type methods.
+  * Remove WIN32OLE_EVENT wait methods.
+
